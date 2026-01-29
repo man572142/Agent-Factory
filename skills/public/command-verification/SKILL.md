@@ -23,11 +23,11 @@ Main Agent wants to execute command
          ↓
     Trigger this skill
          ↓
-    Load command registry
+    Run verify_command.py to check registry
          ↓
-    Parse command line into individual commands
+    If can_auto_execute=true → Execute immediately
          ↓
-    Delegate to verification subagent
+    Otherwise, delegate to command-verifier subagent
          ↓
     Subagent checks each command:
       ├── Known + AlwaysAllow → Show info, mark for auto-execute
@@ -39,19 +39,9 @@ Main Agent wants to execute command
 
 ## How to Use This Skill
 
-### Step 1: Parse the Command Line
+### Step 1: Verify Commands Against Registry
 
-When you need to execute a command, first parse it using the command parser:
-
-```bash
-python skills/public/command-verification/scripts/parse_command.py --json "your command here"
-```
-
-This splits compound commands (using `&&`, `||`, `;`, `|`) into individual commands.
-
-### Step 2: Verify Commands Against Registry
-
-Run the verification script to check all commands:
+When you need to execute a command, run the verification script:
 
 ```bash
 python skills/public/command-verification/scripts/verify_command.py --json "your command here"
@@ -65,40 +55,36 @@ The output includes:
 - `unknown_commands`: Commands not in the registry
 - `needs_permission`: Commands requiring user approval
 
-### Step 3: Delegate to Verification Subagent
+### Step 2: Check if Auto-Execute is Allowed
 
-Spawn a `command-verifier` subagent with the verification results and command line. The subagent will:
+If `can_auto_execute` is `true`, all commands are known and have `AlwaysAllow` permission. You can proceed directly to execution.
 
+### Step 3: Delegate to command-verifier Subagent
+
+If `can_auto_execute` is `false`, use the Task tool to spawn the `command-verifier` subagent:
+
+```
+Use the Task tool with subagent_type="command-verifier" and provide:
+- The command line to be executed
+- The JSON verification results
+- The registry path: skills/public/command-verification/assets/command_registry.json
+```
+
+**Example Task invocation:**
+
+```json
+{
+  "description": "Verify command before execution",
+  "subagent_type": "command-verifier",
+  "prompt": "Verify this command before execution:\n\nCommand Line: git push origin main\n\nVerification Results:\n{...json results...}\n\nRegistry Path: skills/public/command-verification/assets/command_registry.json"
+}
+```
+
+The `command-verifier` subagent is defined in `.claude/agents/command-verifier.md` and will:
 1. Display command information to the user
-2. For unknown commands: Generate info and ask if it should be added
+2. For unknown commands: Generate info and ask if it should be added to registry
 3. For AlwaysAsk commands: Request explicit permission
 4. Return whether execution can proceed
-
-**Subagent Prompt Template:**
-
-```
-You are the Command Verification Subagent. Your task is to verify the following
-command before execution and interact with the user as needed.
-
-Command Line: {command_line}
-
-Verification Results:
-{json_verification_results}
-
-Command Registry Path: skills/public/command-verification/assets/command_registry.json
-
-Instructions:
-1. Display each command's information to the user with risk indicators
-2. For UNKNOWN commands: Generate appropriate command info and ask user to confirm adding to registry
-3. For AlwaysAsk commands: Ask for explicit permission to execute
-4. For AlwaysAllow commands: Just display info (no permission needed)
-5. Return final decision: ALLOW, DENY, or PARTIAL (some commands approved)
-
-Use colored risk indicators:
-- 🟢 LOW (green): Safe operations
-- 🟡 MEDIUM (yellow): Moderate risk
-- 🔴 HIGH/CRITICAL (red): Significant risk
-```
 
 ### Step 4: Handle Subagent Response
 
@@ -107,6 +93,12 @@ Based on the subagent's response:
 - **ALLOW**: Proceed with command execution
 - **DENY**: Do not execute; inform user
 - **PARTIAL**: Execute only approved commands
+
+## Subagent Configuration
+
+The `command-verifier` subagent is defined at `.claude/agents/command-verifier.md` with:
+- **Tools**: Read, Bash, Write (for reading registry and adding commands)
+- **Model**: haiku (fast responses for interactive verification)
 
 ## Command Information Structure
 
@@ -143,18 +135,7 @@ Each command in the registry has:
 
 ## Adding New Commands
 
-When a command is not in the registry, generate its information:
-
-```bash
-python skills/public/command-verification/scripts/add_command.py \
-  "command-name" \
-  "Description of what it does" \
-  "AlwaysAllow|AlwaysAsk" \
-  "low|medium|high|critical" \
-  "Reason for this risk level"
-```
-
-Or use JSON format:
+When a command is not in the registry, the subagent generates its information and asks the user to confirm. If approved, use:
 
 ```bash
 python skills/public/command-verification/scripts/add_command.py --json '{
@@ -172,87 +153,75 @@ python skills/public/command-verification/scripts/add_command.py --json '{
 
 **Command:** `ls -la && pwd`
 
-**Output:**
+**Verification result:** `can_auto_execute: true`
+
+**Action:** Execute immediately without spawning subagent.
+
 ```
-Command Verification Report
-==================================================
-Command: ls -la && pwd
-
-🟢 [ALLOW] All commands can be executed automatically
-
-Highest Risk Level: LOW
-
-Commands:
---------------------------------------------------
-  ls
-    Full: ls -la
-    Description: List directory contents
-    Permission: AlwaysAllow
-    Risk: 🟢 LOW - Read-only operation
-
-  pwd
-    Full: pwd
-    Description: Print working directory
-    Permission: AlwaysAllow
-    Risk: 🟢 LOW - Read-only operation
-
-→ Proceeding with execution...
+🟢 All commands verified (AlwaysAllow). Executing: ls -la && pwd
 ```
 
 ### Example 2: Command Requires Permission
 
 **Command:** `rm -rf temp/`
 
-**Output:**
+**Verification result:** `can_auto_execute: false`, `needs_permission: ["rm"]`
+
+**Action:** Spawn `command-verifier` subagent to get user permission.
+
 ```
-Command Verification Report
-==================================================
+════════════════════════════════════════════════════════
+COMMAND VERIFICATION
+════════════════════════════════════════════════════════
+
 Command: rm -rf temp/
 
-🟡 [ASK] User permission required
-
-Highest Risk Level: HIGH
-
-Commands:
---------------------------------------------------
-  rm
-    Full: rm -rf temp/
-    Description: Remove files or directories. Permanently deletes files.
-    Permission: AlwaysAsk
-    Risk: 🔴 HIGH - Permanently deletes files; cannot be undone easily
+────────────────────────────────────────────────────────
+Command: rm
+────────────────────────────────────────────────────────
+Full: rm -rf temp/
+Description: Remove files or directories. Permanently deletes files.
+Permission: AlwaysAsk
+Risk: 🔴 HIGH - Permanently deletes files; cannot be undone easily
 
 ⚠️  This command requires your permission to execute.
-    Do you want to proceed? (yes/no)
+Do you want to proceed? (yes/no)
 ```
 
 ### Example 3: Unknown Command
 
 **Command:** `mycustomtool --process data.csv`
 
-**Output:**
+**Verification result:** `all_known: false`, `unknown_commands: ["mycustomtool"]`
+
+**Action:** Spawn `command-verifier` subagent to generate info and add to registry.
+
 ```
-Command Verification Report
-==================================================
+════════════════════════════════════════════════════════
+COMMAND VERIFICATION
+════════════════════════════════════════════════════════
+
 Command: mycustomtool --process data.csv
 
-🟡 [UNKNOWN] Command not in registry
+────────────────────────────────────────────────────────
+Command: mycustomtool [UNKNOWN]
+────────────────────────────────────────────────────────
+Full: mycustomtool --process data.csv
+Status: Not in registry
 
-Commands:
---------------------------------------------------
-  mycustomtool [UNKNOWN]
-    Full: mycustomtool --process data.csv
-    Status: Not in registry
+📝 Unknown command detected. Generated information:
 
-📝 I need to add this command to the registry.
-   Please confirm the following information:
+- Name: mycustomtool
+- Description: Custom data processing tool
+- Suggested Permission: AlwaysAsk
+- Risk Level: medium
+- Risk Reason: Unknown command; executes external processing
 
-   Name: mycustomtool
-   Description: [Generated description based on context]
-   Permission: AlwaysAsk (recommended for unknown commands)
-   Risk Level: medium
-   Risk Reason: Unknown command; requires verification
-
-   Does this look correct? Should I add it to the registry? (yes/no/modify)
+Options:
+1. Approve and add to registry
+2. Add to registry, don't execute
+3. Modify information
+4. Reject
 ```
 
 ## Resources
@@ -265,10 +234,13 @@ Commands:
 ### assets/
 - `command_registry.json` - Database of known commands with their info
 
+### Subagent
+- `.claude/agents/command-verifier.md` - Subagent for user interaction
+
 ## Integration Notes
 
 1. **Always use this skill before bash execution** - No exceptions
-2. **Subagent delegation** - Use a subagent for user interaction to keep main agent context clean
-3. **Registry updates** - Persist new commands so they don't need re-verification
-4. **Compound commands** - Always parse first; each command is verified independently
-5. **Piped commands** - Each command in a pipe is treated as a separate command
+2. **Fast path for safe commands** - If `can_auto_execute=true`, skip subagent
+3. **Subagent for interaction** - Use `command-verifier` subagent for permission requests
+4. **Registry persistence** - New commands are saved so they don't need re-verification
+5. **Compound commands** - Each command in `&&`, `||`, `;`, `|` chains is verified independently
