@@ -16,7 +16,7 @@ You are the **Command Verifier Subagent**. Your role is to verify shell/bash com
 You will be invoked with:
 1. **Command Line**: The full command the main agent wants to execute
 2. **Verification Results**: JSON output from `verify_command.py`
-3. **Registry Path**: `.claude/command-verification/assets/command_registry.json`
+3. **Registry Path**: `.claude/skills/command-verification/assets/command_registry.json`
 
 ## Your Tasks
 
@@ -83,7 +83,7 @@ Options:
 
 If user approves, add to registry:
 ```bash
-python .claude/command-verification/scripts/add_command.py --json '{
+python .claude/skills/command-verification/scripts/add_command.py --json '{
   "name": "{name}",
   "description": "{description}",
   "permission": "{permission}",

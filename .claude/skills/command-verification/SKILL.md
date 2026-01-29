@@ -44,7 +44,7 @@ Main Agent wants to execute command
 When you need to execute a command, run the verification script:
 
 ```bash
-python .claude/command-verification/scripts/verify_command.py --json "your command here"
+python .claude/skills/command-verification/scripts/verify_command.py --json "your command here"
 ```
 
 The output includes:
@@ -67,7 +67,7 @@ If `can_auto_execute` is `false`, use the Task tool to spawn the `command-verifi
 Use the Task tool with subagent_type="command-verifier" and provide:
 - The command line to be executed
 - The JSON verification results
-- The registry path: .claude/command-verification/assets/command_registry.json
+- The registry path: .claude/skills/command-verification/assets/command_registry.json
 ```
 
 **Example Task invocation:**
@@ -76,7 +76,7 @@ Use the Task tool with subagent_type="command-verifier" and provide:
 {
   "description": "Verify command before execution",
   "subagent_type": "command-verifier",
-  "prompt": "Verify this command before execution:\n\nCommand Line: git push origin main\n\nVerification Results:\n{...json results...}\n\nRegistry Path: .claude/command-verification/assets/command_registry.json"
+  "prompt": "Verify this command before execution:\n\nCommand Line: git push origin main\n\nVerification Results:\n{...json results...}\n\nRegistry Path: .claude/skills/command-verification/assets/command_registry.json"
 }
 ```
 
@@ -138,7 +138,7 @@ Each command in the registry has:
 When a command is not in the registry, the subagent generates its information and asks the user to confirm. If approved, use:
 
 ```bash
-python .claude/command-verification/scripts/add_command.py --json '{
+python .claude/skills/command-verification/scripts/add_command.py --json '{
   "name": "command-name",
   "description": "What it does",
   "permission": "AlwaysAsk",
