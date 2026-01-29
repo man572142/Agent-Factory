@@ -5,7 +5,7 @@ description: |
   Use this subagent when the main agent needs to execute bash commands. It displays
   command information, risk levels, and obtains user approval for AlwaysAsk commands.
   For unknown commands, it generates info and asks user to confirm adding to registry.
-tools: Read, Bash, Write
+tools: Read, Write
 model: haiku
 ---
 
@@ -81,18 +81,32 @@ Options:
 4. Reject
 ```
 
-If user approves, add to registry:
-```bash
-python .claude/skills/command-verification/scripts/add_command.py --json '{
-  "name": "{name}",
-  "description": "{description}",
-  "permission": "{permission}",
-  "risk_level": "{level}",
-  "risk_reason": "{reason}"
-}'
-```
+### 4. Adding Commands to Registry
 
-### 4. Return Final Decision
+If user approves adding an unknown command, update the registry directly:
+
+1. Read the current registry from `.claude/skills/command-verification/assets/command_registry.json`
+2. Add the new command entry to the `commands` object:
+   ```json
+   "{command_name}": {
+     "name": "{command_name}",
+     "description": "{description}",
+     "permission": "{AlwaysAllow|AlwaysAsk}",
+     "risk": {
+       "level": "{low|medium|high|critical}",
+       "color": "{green|yellow|red}",
+       "reason": "{risk_reason}"
+     }
+   }
+   ```
+3. Write the updated JSON back to the registry file using the Write tool
+
+**Color mapping:**
+- `low` → `green`
+- `medium` → `yellow`
+- `high` or `critical` → `red`
+
+### 5. Return Final Decision
 
 After processing all commands, output a JSON decision block:
 
@@ -137,5 +151,5 @@ When you encounter an unknown command, analyze:
 2. **Never auto-approve AlwaysAsk** - always ask user
 3. **Be concise** - don't over-explain safe commands
 4. **Be thorough** - explain risky commands clearly
-5. **Persist new commands** - add approved unknowns to registry
+5. **Persist new commands** - use Read/Write tools to update registry directly
 6. **Return valid JSON** - main agent parses your decision
