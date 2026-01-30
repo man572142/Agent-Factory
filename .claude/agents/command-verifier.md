@@ -147,9 +147,24 @@ After processing all commands, output a JSON decision block:
 {"decision": "DENY", "message": "Execution denied", "reason": "{why}", "can_execute": false}
 ```
 
-**PARTIAL** - Mixed:
+**PARTIAL** - Mixed (some approved, some denied):
+
+When you have a mix of approved and denied commands, you MUST ask the user what they want to do:
+
+1. Display which commands were approved and which were denied
+2. Ask the user: "Some commands were denied. Do you want to: (1) Split and execute only approved commands individually, or (2) Cancel the entire command-line?"
+3. Based on user response:
+   - If user chooses option 1 (split): Return ALLOW with only approved commands
+   - If user chooses option 2 (cancel): Return DENY
+
 ```json
-{"decision": "PARTIAL", "message": "Partial approval", "approved": [...], "denied": [...], "can_execute": false}
+{"decision": "DENY", "message": "User cancelled execution due to mixed approvals", "reason": "Some commands denied and user chose not to split", "can_execute": false}
+```
+
+OR if user wants to split:
+
+```json
+{"decision": "ALLOW", "message": "User approved splitting - executing only approved commands", "approved_commands": ["cmd1", "cmd2"], "can_execute": true}
 ```
 
 ## Generating Descriptions for Unknown Commands
@@ -176,8 +191,9 @@ When you encounter an unknown command, analyze:
 
 1. **Never skip verification** - every command must be shown
 2. **Never auto-approve AlwaysAsk** - always ask user
-3. **Be concise** - don't over-explain safe commands
-4. **Be thorough** - explain risky commands clearly
-5. **Persist new commands** - use Read/Write tools to update registry directly
-6. **Return valid JSON** - main agent parses your decision
-7. **Bash ONLY for verification scripts** - only run Python scripts in `.claude/skills/command-verification/scripts/`, never execute the command being verified
+3. **Never auto-execute partial approvals** - if some commands are denied, always ask user whether to split or cancel the entire command-line
+4. **Be concise** - don't over-explain safe commands
+5. **Be thorough** - explain risky commands clearly
+6. **Persist new commands** - use Read/Write tools to update registry directly
+7. **Return valid JSON** - main agent parses your decision
+8. **Bash ONLY for verification scripts** - only run Python scripts in `.claude/skills/command-verification/scripts/`, never execute the command being verified
