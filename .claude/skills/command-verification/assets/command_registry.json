@@ -1,5 +1,26 @@
 {
   "version": "1.0.0",
   "description": "Registry of known commands with their descriptions, permissions, and risk levels",
-  "commands": {}
+  "commands": {
+    "ls": {
+      "name": "ls",
+      "description": "List directory contents and file information",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Read-only operation, displays file listings"
+      }
+    },
+    "rm": {
+      "name": "rm",
+      "description": "Remove files or directories",
+      "permission": "AlwaysAsk",
+      "risk": {
+        "level": "high",
+        "color": "red",
+        "reason": "Permanently deletes files, cannot be undone"
+      }
+    }
+  }
 }
