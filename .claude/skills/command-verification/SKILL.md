@@ -21,72 +21,42 @@ This skill ensures safe command execution by verifying all bash/shell commands b
 ```
 Main Agent wants to execute command
          ↓
-    Trigger this skill
+    Trigger command-verification skill
          ↓
-    Run verify_command.py to check registry
+    Immediately spawn command-verifier subagent
          ↓
-    If can_auto_execute=true → Execute immediately
-         ↓
-    Otherwise, delegate to command-verifier subagent
-         ↓
-    Subagent checks each command:
-      ├── Known + AlwaysAllow → Show info, mark for auto-execute
-      ├── Known + AlwaysAsk  → Show info, request permission
-      └── Unknown → Generate info, ask to add to registry
+    Subagent handles everything:
+      ├── Run verify_command.py (as subagent, no verification needed)
+      ├── Check registry and parse commands
+      ├── Display info to user
+      └── Get approvals if needed
          ↓
     Return execution decision to main agent
 ```
 
 ## How to Use This Skill
 
-### Step 1: Verify Commands Against Registry
+When you need to execute a Bash command, invoke this skill with the command line as an argument.
 
-When you need to execute a command, run the verification script:
+The skill will immediately spawn the command-verifier subagent to handle all verification.
 
-```bash
-python .claude/skills/command-verification/scripts/verify_command.py --json "your command here"
-```
+### Step 1: Spawn Command Verifier Subagent
 
-The output includes:
-- `all_known`: Whether all commands are in the registry
-- `can_auto_execute`: Whether execution can proceed without asking
-- `highest_risk`: The highest risk level among all commands
-- `commands`: Detailed info for each command
-- `unknown_commands`: Commands not in the registry
-- `needs_permission`: Commands requiring user approval
-
-### Step 2: Check if Auto-Execute is Allowed
-
-If `can_auto_execute` is `true`, all commands are known and have `AlwaysAllow` permission. You can proceed directly to execution.
-
-### Step 3: Delegate to command-verifier Subagent
-
-If `can_auto_execute` is `false`, use the Task tool to spawn the `command-verifier` subagent:
-
-```
 Use the Task tool with subagent_type="command-verifier" and provide:
 - The command line to be executed
-- The JSON verification results
 - The registry path: .claude/skills/command-verification/assets/command_registry.json
-```
 
-**Example Task invocation:**
+**Example:**
 
 ```json
 {
   "description": "Verify command before execution",
   "subagent_type": "command-verifier",
-  "prompt": "Verify this command before execution:\n\nCommand Line: git push origin main\n\nVerification Results:\n{...json results...}\n\nRegistry Path: .claude/skills/command-verification/assets/command_registry.json"
+  "prompt": "Verify this command before execution:\n\nCommand: winget install --id Microsoft.Powershell --source winget\n\nRegistry Path: .claude/skills/command-verification/assets/command_registry.json"
 }
 ```
 
-The `command-verifier` subagent is defined in `.claude/agents/command-verifier.md` and will:
-1. Display command information to the user
-2. For unknown commands: Generate info and ask if it should be added to registry
-3. For AlwaysAsk commands: Request explicit permission
-4. Return whether execution can proceed
-
-### Step 4: Handle Subagent Response
+### Step 2: Handle Subagent Response
 
 Based on the subagent's response:
 
@@ -97,8 +67,14 @@ Based on the subagent's response:
 ## Subagent Configuration
 
 The `command-verifier` subagent is defined at `.claude/agents/command-verifier.md` with:
-- **Tools**: Read, Bash, Write (for reading registry and adding commands)
+- **Tools**: Read, Write, Bash (restricted)
 - **Model**: haiku (fast responses for interactive verification)
+
+**Security Model**:
+- **Main agent**: Cannot run ANY Bash during verification (breaks circular dependency)
+- **Subagent Bash access**: RESTRICTED to only running Python scripts in `.claude/skills/command-verification/scripts/`
+- **Never executes**: The subagent never executes the command being verified, only analyzes it
+- This creates a secure, one-way verification flow: main agent → subagent → verification scripts → decision
 
 ## Command Information Structure
 
@@ -135,39 +111,20 @@ Each command in the registry has:
 
 ## Adding New Commands
 
-When a command is not in the registry, the subagent generates its information and asks the user to confirm. If approved, use:
+When a command is not in the registry, the subagent automatically:
+1. Generates command information based on analysis
+2. Presents it to the user for approval
+3. If approved, updates the registry directly using Read/Write tools (no Bash needed)
 
-```bash
-python .claude/skills/command-verification/scripts/add_command.py --json '{
-  "name": "command-name",
-  "description": "What it does",
-  "permission": "AlwaysAsk",
-  "risk_level": "medium",
-  "risk_reason": "Reason for risk level"
-}'
-```
+The subagent handles all registry updates internally - no manual intervention required.
 
 ## Example Interactions
 
-### Example 1: All Commands Known and AlwaysAllow
-
-**Command:** `ls -la && pwd`
-
-**Verification result:** `can_auto_execute: true`
-
-**Action:** Execute immediately without spawning subagent.
-
-```
-🟢 All commands verified (AlwaysAllow). Executing: ls -la && pwd
-```
-
-### Example 2: Command Requires Permission
+### Example 1: Command Requires Permission
 
 **Command:** `rm -rf temp/`
 
-**Verification result:** `can_auto_execute: false`, `needs_permission: ["rm"]`
-
-**Action:** Spawn `command-verifier` subagent to get user permission.
+**Action:** Spawn `command-verifier` subagent to verify and get user permission.
 
 ```
 ════════════════════════════════════════════════════════
@@ -188,13 +145,11 @@ Risk: 🔴 HIGH - Permanently deletes files; cannot be undone easily
 Do you want to proceed? (yes/no)
 ```
 
-### Example 3: Unknown Command
+### Example 2: Unknown Command
 
 **Command:** `mycustomtool --process data.csv`
 
-**Verification result:** `all_known: false`, `unknown_commands: ["mycustomtool"]`
-
-**Action:** Spawn `command-verifier` subagent to generate info and add to registry.
+**Action:** Spawn `command-verifier` subagent to verify, generate info and add to registry.
 
 ```
 ════════════════════════════════════════════════════════
@@ -240,7 +195,8 @@ Options:
 ## Integration Notes
 
 1. **Always use this skill before bash execution** - No exceptions
-2. **Fast path for safe commands** - If `can_auto_execute=true`, skip subagent
-3. **Subagent for interaction** - Use `command-verifier` subagent for permission requests
+2. **Always delegate to subagent** - The subagent handles all verification logic
+3. **Subagent for interaction** - Use `command-verifier` subagent for all command verification
 4. **Registry persistence** - New commands are saved so they don't need re-verification
 5. **Compound commands** - Each command in `&&`, `||`, `;`, `|` chains is verified independently
+6. **No circular dependency** - Main agent never runs Bash for verification; subagent is a trusted execution environment
