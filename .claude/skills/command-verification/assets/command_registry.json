@@ -21,6 +21,26 @@
         "color": "red",
         "reason": "Permanently deletes files, cannot be undone"
       }
+    },
+    "git": {
+      "name": "git",
+      "description": "Version control system for tracking changes in source code",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Standard version control operations, changes can be reverted"
+      }
+    },
+    "python3": {
+      "name": "python3",
+      "description": "Python interpreter for running Python scripts",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Executes Python code, risk depends on the script being run"
+      }
     }
   }
 }
