@@ -30,7 +30,7 @@ The subagent returns a JSON decision:
 
 - **ALLOW**: Proceed with command execution
 - **DENY**: Do not execute; inform user
-- **PARTIAL**: Execute only approved commands
+- **PARTIAL**: Some commands denied - ask user if they want to split and execute approved commands individually, or cancel the entire command-line
 
 ## Notes
 
