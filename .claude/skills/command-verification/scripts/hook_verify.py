@@ -131,7 +131,7 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
             eprint(line)
         eprint("")
 
-    # Handle unknown commands - block and explain how to add
+    # Handle unknown commands - ask and delegate to command-verifier subagent
     if unknown_commands:
         eprint("════════════════════════════════════════════════════════")
         eprint("⚠️  UNKNOWN COMMANDS DETECTED")
@@ -141,18 +141,14 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
         for cmd in unknown_commands:
             eprint(f"  • {cmd}")
         eprint("")
-        eprint("To add a command to the registry, use:")
-        eprint("")
-        eprint(f"  python {script_dir}/add_command.py <name> <description> <permission> <risk_level> <risk_reason>")
-        eprint("")
-        eprint("Or spawn the command-verifier subagent to add interactively.")
+        eprint("Spawning command-verifier subagent to review and handle...")
         eprint("")
 
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": f"Unknown command(s): {', '.join(unknown_commands)}. Add to registry before execution."
+                "permissionDecisionReason": f"Unknown command(s): {', '.join(unknown_commands)}. Spawn the command-verifier subagent with the original command '{command_line}' so it can research each unknown command, present the analysis to the user, and ask whether to add it to the registry and whether to allow or deny execution."
             }
         }
 

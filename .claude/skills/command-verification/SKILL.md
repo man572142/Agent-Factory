@@ -3,14 +3,9 @@ name: command-verification
 description: |
   Automatic command verification hook that ensures safe bash/shell command execution.
   Displays educational information about each command including descriptions, risk levels,
-  and reasons before execution. Unknown commands are blocked until added to the registry.
+  and reasons before execution. Unknown commands trigger the command-verifier subagent
+  to research, present analysis, and ask the user whether to add and/or allow.
 
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: "python3 .claude/skills/command-verification/scripts/hook_verify.py"
 ---
 
 # Command Verification Skill
@@ -38,30 +33,7 @@ This skill automatically verifies all bash/shell commands before execution using
 4. Based on registry status:
    - **Known + AlwaysAllow**: Executes automatically
    - **Known + AlwaysAsk**: Blocks for your approval
-   - **Unknown**: Blocks until added to registry
-
-## Adding Unknown Commands
-
-When an unknown command is blocked, you have two options:
-
-### Option 1: Use the add_command.py script directly
-```bash
-python .claude/skills/command-verification/scripts/add_command.py \
-  "command_name" \
-  "Description of what it does" \
-  "AlwaysAllow|AlwaysAsk" \
-  "low|medium|high|critical" \
-  "Reason for the risk level"
-```
-
-### Option 2: Use the command-verifier subagent for interactive addition
-Spawn the subagent with:
-```json
-{
-  "subagent_type": "command-verifier",
-  "prompt": "Add this command to the registry: <command_name>"
-}
-```
+   - **Unknown**: The command-verifier subagent is spawned automatically. It researches the command, presents an analysis (description, risk level, suggested permission), and asks you whether to add it to the registry and whether to allow or deny execution.
 
 ## Registry Location
 
@@ -94,4 +66,4 @@ Analyzing 1 command(s)...
 
 - The hook runs automatically for ALL Bash commands - you don't need to invoke anything manually
 - Commands are verified even in compound statements (e.g., `mkdir foo && cd foo`)
-- The subagent is only needed when you want to interactively add new commands to the registry
+- The command-verifier subagent is spawned automatically whenever an unknown command is encountered

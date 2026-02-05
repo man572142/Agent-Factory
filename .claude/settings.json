@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/skills/command-verification/scripts/hook_verify.py"
+            "command": "python .claude/skills/command-verification/scripts/hook_verify.py"
           }
         ]
       }
