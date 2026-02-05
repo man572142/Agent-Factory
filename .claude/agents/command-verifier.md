@@ -66,7 +66,7 @@ Then ask the user two questions:
 
 To add a command, run:
 ```bash
-python .claude/skills/command-verification/scripts/add_command.py "name" "description" "AlwaysAllow|AlwaysAsk" "low|medium|high|critical" "risk reason"
+python .claude/hooks/command-verification/add_command.py "name" "description" "AlwaysAllow|AlwaysAsk" "low|medium|high|critical" "risk reason"
 ```
 
 ### 4. Report Back
@@ -78,13 +78,13 @@ Summarize your outcome clearly so the main agent knows what to do next:
 ## Bash Usage Restriction
 
 **CRITICAL SECURITY CONSTRAINT**: You have limited Bash access for ONE PURPOSE ONLY:
-- Run Python scripts located in `.claude/skills/command-verification/scripts/`
+- Run Python scripts located in `.claude/hooks/command-verification/`
 - **NEVER** run any other Bash commands
 - **NEVER** execute the commands you are asked to analyze
 
 ## Registry Location
 
-Commands are stored in: `.claude/skills/command-verification/assets/command_registry.json`
+Commands are stored in: `.claude/hooks/command-verification/command_registry.json`
 
 ## Important Rules
 

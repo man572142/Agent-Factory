@@ -37,7 +37,7 @@ RISK_INDICATORS = {
     "critical": ("🔴", "Critical risk"),
 }
 
-REGISTRY_PATH = os.path.join(script_dir, "..", "assets", "command_registry.json")
+REGISTRY_PATH = os.path.join(script_dir, "command_registry.json")
 
 
 def load_registry() -> Dict[str, Any]:
