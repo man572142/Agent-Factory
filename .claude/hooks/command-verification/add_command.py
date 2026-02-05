@@ -25,8 +25,6 @@ from typing import Dict, Any, Optional
 
 REGISTRY_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "..",
-    "assets",
     "command_registry.json"
 )
 

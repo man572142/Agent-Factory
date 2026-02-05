@@ -36,7 +36,7 @@ def load_registry(registry_path: Optional[str] = None) -> Dict[str, Any]:
     if registry_path is None:
         # Default to the assets directory relative to this script
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        registry_path = os.path.join(script_dir, "..", "assets", "command_registry.json")
+        registry_path = os.path.join(script_dir, "command_registry.json")
 
     try:
         with open(registry_path, "r") as f:

@@ -12,7 +12,7 @@ before execution. It provides:
 Hook I/O:
 - Input: JSON from stdin with tool_input.command
 - Output (stderr): Explanatory information for the user
-- Output (stdout): JSON decision {"decision": "allow|block", "reason": "..."}
+- Output (stdout): JSON decision using hookSpecificOutput format for PreToolUse
 
 Usage (as a hook, not meant to be run directly):
     echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' | python hook_verify.py
@@ -37,7 +37,7 @@ RISK_INDICATORS = {
     "critical": ("🔴", "Critical risk"),
 }
 
-REGISTRY_PATH = os.path.join(script_dir, "..", "assets", "command_registry.json")
+REGISTRY_PATH = os.path.join(script_dir, "command_registry.json")
 
 
 def load_registry() -> Dict[str, Any]:
@@ -131,7 +131,7 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
             eprint(line)
         eprint("")
 
-    # Handle unknown commands - block and explain how to add
+    # Handle unknown commands - ask and delegate to command-verifier subagent
     if unknown_commands:
         eprint("════════════════════════════════════════════════════════")
         eprint("⚠️  UNKNOWN COMMANDS DETECTED")
@@ -141,16 +141,15 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
         for cmd in unknown_commands:
             eprint(f"  • {cmd}")
         eprint("")
-        eprint("To add a command to the registry, use:")
-        eprint("")
-        eprint(f"  python {script_dir}/add_command.py <name> <description> <permission> <risk_level> <risk_reason>")
-        eprint("")
-        eprint("Or spawn the command-verifier subagent to add interactively.")
+        eprint("Spawning command-verifier subagent to review and handle...")
         eprint("")
 
         return {
-            "decision": "block",
-            "reason": f"Unknown command(s): {', '.join(unknown_commands)}. Add to registry before execution."
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"Unknown command(s): {', '.join(unknown_commands)}. Spawn the command-verifier subagent with the original command '{command_line}' so it can research each unknown command, present the analysis to the user, and ask whether to add it to the registry and whether to allow or deny execution."
+            }
         }
 
     # Handle AlwaysAsk commands - block for user confirmation
@@ -169,8 +168,11 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
         eprint("")
 
         return {
-            "decision": "block",
-            "reason": f"Permission required for: {', '.join(needs_permission)}"
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": f"Permission required for: {', '.join(needs_permission)}"
+            }
         }
 
     # All commands are known and AlwaysAllow
@@ -181,8 +183,11 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
     eprint("")
 
     return {
-        "decision": "allow",
-        "reason": "All commands verified and approved for execution"
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "permissionDecisionReason": "All commands verified and approved for execution"
+        }
     }
 
 
@@ -199,8 +204,11 @@ def main():
         if not command:
             # No command to verify
             result = {
-                "decision": "allow",
-                "reason": "No command to verify"
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": "No command to verify"
+                }
             }
         else:
             result = verify_and_explain(command)
@@ -211,15 +219,21 @@ def main():
     except json.JSONDecodeError as e:
         eprint(f"Error: Invalid JSON input - {e}")
         print(json.dumps({
-            "decision": "block",
-            "reason": f"Hook error: Invalid JSON input - {e}"
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"Hook error: Invalid JSON input - {e}"
+            }
         }))
         sys.exit(1)
     except Exception as e:
         eprint(f"Error: {e}")
         print(json.dumps({
-            "decision": "block",
-            "reason": f"Hook error: {e}"
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"Hook error: {e}"
+            }
         }))
         sys.exit(1)
 
