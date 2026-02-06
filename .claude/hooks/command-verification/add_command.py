@@ -74,6 +74,15 @@ def add_command(
     Returns a result object with status and any errors.
     """
     # Validate inputs
+    # Reject shell operators in command name — subcommands are fine but not pipelines
+    shell_operators = ["&&", "||", ";", "|"]
+    for op in shell_operators:
+        if op in name:
+            return {
+                "success": False,
+                "error": f"Invalid command name: contains shell operator '{op}'. Register individual commands/subcommands, not pipelines."
+            }
+
     if permission not in ["AlwaysAllow", "AlwaysAsk"]:
         return {
             "success": False,

@@ -48,9 +48,28 @@ def load_registry(registry_path: Optional[str] = None) -> Dict[str, Any]:
 
 
 def get_command_info(command_name: str, registry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Get information about a command from the registry."""
+    """Get information about a command from the registry (simple base-name lookup)."""
     commands = registry.get("commands", {})
     return commands.get(command_name)
+
+
+def get_command_info_hierarchical(candidates: List[str], registry: Dict[str, Any]) -> tuple:
+    """
+    Try candidate keys most-specific-first and return (matched_key, info).
+    Returns (None, None) if no match found.
+    """
+    commands = registry.get("commands", {})
+    for candidate in candidates:
+        if candidate in commands:
+            return candidate, commands[candidate]
+    return None, None
+
+
+# Flags that escalate AlwaysAllow to AlwaysAsk
+DANGEROUS_FLAGS = {
+    "--force", "-f", "--hard", "--delete", "-D",
+    "-rf", "-fr", "--no-verify", "--force-with-lease",
+}
 
 
 def verify_commands(command_line: str, registry_path: Optional[str] = None) -> Dict[str, Any]:
@@ -81,7 +100,12 @@ def verify_commands(command_line: str, registry_path: Optional[str] = None) -> D
 
     for cmd in parsed["commands"]:
         cmd_name = cmd["command_name"]
-        info = get_command_info(cmd_name, registry)
+        parts = cmd.get("command_parts", {})
+        candidates = parts.get("command_key_candidates", [cmd_name])
+        flags = set(parts.get("flags", []))
+
+        # Hierarchical lookup - most specific first
+        matched_key, info = get_command_info_hierarchical(candidates, registry)
 
         if info is None:
             result["all_known"] = False
@@ -92,20 +116,31 @@ def verify_commands(command_line: str, registry_path: Optional[str] = None) -> D
                 "full_command": cmd["full_command"],
                 "known": False,
                 "info": None,
+                "matched_key": None,
+                "escalated": False,
             })
         else:
+            # Check for dangerous flag escalation
+            escalated = False
+            if info.get("permission") == "AlwaysAllow":
+                dangerous_found = flags & DANGEROUS_FLAGS
+                if dangerous_found:
+                    escalated = True
+
             cmd_result = {
                 "command_name": cmd_name,
                 "full_command": cmd["full_command"],
                 "known": True,
                 "info": info,
+                "matched_key": matched_key,
+                "escalated": escalated,
             }
             result["commands"].append(cmd_result)
 
             # Check permission
-            if info.get("permission") == "AlwaysAsk":
+            if info.get("permission") == "AlwaysAsk" or escalated:
                 result["can_auto_execute"] = False
-                result["needs_permission"].append(cmd_name)
+                result["needs_permission"].append(matched_key or cmd_name)
 
             # Track highest risk
             cmd_risk = info.get("risk", {}).get("level", "low")
@@ -153,12 +188,19 @@ def format_output(result: Dict[str, Any], use_color: bool = True) -> str:
             risk_color = risk.get("color", "yellow")
             permission = info.get("permission", "AlwaysAsk")
             description = info.get("description", "No description available")
+            matched_key = cmd.get("matched_key")
+            escalated = cmd.get("escalated", False)
 
             color = c.get(risk_color, c["yellow"])
             lines.append(f"  {c['bold']}{cmd_name}{c['reset']}")
+            if matched_key and matched_key != cmd_name:
+                lines.append(f"    Matched: {matched_key}")
             lines.append(f"    Full: {full_cmd}")
             lines.append(f"    Description: {description}")
-            lines.append(f"    Permission: {permission}")
+            if escalated:
+                lines.append(f"    Permission: AlwaysAsk (escalated from AlwaysAllow due to dangerous flags)")
+            else:
+                lines.append(f"    Permission: {permission}")
             lines.append(f"    Risk: {color}{risk_level.upper()}{c['reset']} - {risk.get('reason', 'N/A')}")
         else:
             lines.append(f"  {c['bold']}{cmd_name}{c['reset']} {c['yellow']}[UNKNOWN]{c['reset']}")

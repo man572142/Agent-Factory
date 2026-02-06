@@ -111,20 +111,67 @@ def split_command_line(command_line: str) -> List[str]:
     return commands
 
 
-def extract_command_name(command: str) -> str:
-    """
-    Extract the base command name from a command string.
-    Handles environment variables, sudo, and other prefixes.
-    """
+def _strip_prefixes(command: str) -> str:
+    """Strip env var assignments from the start of a command string."""
     command = command.strip()
-
-    # Skip environment variable assignments at the start
     while True:
         match = re.match(r'^[A-Za-z_][A-Za-z0-9_]*=\S*\s+', command)
         if match:
             command = command[match.end():]
         else:
             break
+    return command
+
+
+def _tokenize(command: str) -> List[str]:
+    """Tokenize a command string, handling quotes gracefully."""
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
+
+
+def _skip_wrappers(parts: List[str]) -> List[str]:
+    """
+    Skip sudo, env, and other wrapper commands to get to the real command + args.
+    Returns the parts starting from the actual command.
+    """
+    if not parts:
+        return parts
+
+    cmd = parts[0]
+
+    # Handle sudo - skip sudo and its flags
+    if cmd == 'sudo':
+        i = 1
+        while i < len(parts):
+            if parts[i].startswith('-'):
+                if parts[i] in ['-u', '-g', '-C', '-H', '-P']:
+                    i += 2
+                else:
+                    i += 1
+            else:
+                return parts[i:]
+        return ['sudo']
+
+    # Handle common wrappers
+    wrappers = ['time', 'nice', 'nohup', 'env', 'xargs']
+    if cmd in wrappers and len(parts) > 1:
+        i = 1
+        while i < len(parts) and parts[i].startswith('-'):
+            i += 1
+        if i < len(parts):
+            return parts[i:]
+
+    return parts
+
+
+def extract_command_name(command: str) -> str:
+    """
+    Extract the base command name from a command string.
+    Handles environment variables, sudo, and other prefixes.
+    """
+    command = _strip_prefixes(command)
 
     # Handle subshell commands
     if command.startswith('(') or command.startswith('{'):
@@ -134,43 +181,60 @@ def extract_command_name(command: str) -> str:
     if command.startswith('$'):
         return 'substitution'
 
-    try:
-        parts = shlex.split(command)
-    except ValueError:
-        # If shlex fails, fall back to simple split
-        parts = command.split()
-
+    parts = _tokenize(command)
     if not parts:
         return ''
 
-    cmd = parts[0]
+    real_parts = _skip_wrappers(parts)
+    return real_parts[0] if real_parts else ''
 
-    # Handle sudo - return the actual command after sudo
-    if cmd == 'sudo':
-        # Skip sudo flags
-        i = 1
-        while i < len(parts):
-            if parts[i].startswith('-'):
-                # Skip flag and its argument if needed
-                if parts[i] in ['-u', '-g', '-C', '-H', '-P']:
-                    i += 2
-                else:
-                    i += 1
-            else:
-                return parts[i] if i < len(parts) else 'sudo'
-        return 'sudo'
 
-    # Handle common wrappers
-    wrappers = ['time', 'nice', 'nohup', 'env', 'xargs']
-    if cmd in wrappers and len(parts) > 1:
-        # Find the actual command
-        i = 1
-        while i < len(parts) and parts[i].startswith('-'):
-            i += 1
-        if i < len(parts):
-            return parts[i]
+def extract_command_parts(command: str) -> Dict[str, Any]:
+    """
+    Extract detailed command parts including subcommands and flags.
 
-    return cmd
+    Returns a dict with:
+    - base: the base command name (e.g., "git")
+    - tokens: all tokens after wrappers (e.g., ["git", "push", "--force", "origin"])
+    - flags: all flag tokens (starting with -) (e.g., ["--force"])
+    - command_key_candidates: list of registry keys to try, most specific first
+      (e.g., ["git push --force origin", "git push --force", "git push", "git"])
+    """
+    command = _strip_prefixes(command)
+
+    # Handle special command types
+    if command.startswith('(') or command.startswith('{'):
+        return {"base": "subshell", "tokens": ["subshell"], "flags": [],
+                "command_key_candidates": ["subshell"]}
+    if command.startswith('$'):
+        return {"base": "substitution", "tokens": ["substitution"], "flags": [],
+                "command_key_candidates": ["substitution"]}
+
+    parts = _tokenize(command)
+    if not parts:
+        return {"base": "", "tokens": [], "flags": [], "command_key_candidates": []}
+
+    real_parts = _skip_wrappers(parts)
+    if not real_parts:
+        return {"base": "", "tokens": [], "flags": [], "command_key_candidates": []}
+
+    base = real_parts[0]
+    flags = [t for t in real_parts[1:] if t.startswith('-')]
+
+    # Build candidate keys from most specific to least specific
+    # e.g., for ["git", "push", "--force", "origin"]:
+    # ["git push --force origin", "git push --force", "git push", "git"]
+    candidates = []
+    for length in range(len(real_parts), 0, -1):
+        candidate = " ".join(real_parts[:length])
+        candidates.append(candidate)
+
+    return {
+        "base": base,
+        "tokens": real_parts,
+        "flags": flags,
+        "command_key_candidates": candidates,
+    }
 
 
 def parse_command_line(command_line: str) -> Dict[str, Any]:
@@ -186,9 +250,11 @@ def parse_command_line(command_line: str) -> Dict[str, Any]:
     }
 
     for cmd in commands:
+        parts = extract_command_parts(cmd)
         cmd_info = {
             "full_command": cmd,
-            "command_name": extract_command_name(cmd),
+            "command_name": parts["base"],
+            "command_parts": parts,
         }
         parsed["commands"].append(cmd_info)
 

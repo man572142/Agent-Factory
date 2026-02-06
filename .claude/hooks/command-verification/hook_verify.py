@@ -37,6 +37,12 @@ RISK_INDICATORS = {
     "critical": ("🔴", "Critical risk"),
 }
 
+# Flags that escalate AlwaysAllow to AlwaysAsk
+DANGEROUS_FLAGS = {
+    "--force", "-f", "--hard", "--delete", "-D",
+    "-rf", "-fr", "--no-verify", "--force-with-lease",
+}
+
 REGISTRY_PATH = os.path.join(script_dir, "command_registry.json")
 
 
@@ -54,7 +60,8 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def format_command_info(cmd_name: str, full_command: str, info: Dict[str, Any] | None) -> List[str]:
+def format_command_info(cmd_name: str, full_command: str, info: Dict[str, Any] | None,
+                        matched_key: str = None, escalated: bool = False) -> List[str]:
     """Format command information for display."""
     lines = []
 
@@ -62,12 +69,18 @@ def format_command_info(cmd_name: str, full_command: str, info: Dict[str, Any] |
         risk = info.get("risk", {})
         risk_level = risk.get("level", "unknown")
         indicator, _ = RISK_INDICATORS.get(risk_level, ("⚪", "Unknown"))
+        permission = info.get('permission', 'Unknown')
 
         lines.append(f"  Command: {cmd_name}")
+        if matched_key and matched_key != cmd_name:
+            lines.append(f"  Matched: {matched_key}")
         lines.append(f"  Full:    {full_command}")
         lines.append(f"  Description: {info.get('description', 'No description')}")
         lines.append(f"  Risk: {indicator} {risk_level.upper()} - {risk.get('reason', 'No reason provided')}")
-        lines.append(f"  Permission: {info.get('permission', 'Unknown')}")
+        if escalated:
+            lines.append(f"  Permission: AlwaysAsk (⚠️ escalated from AlwaysAllow due to dangerous flags)")
+        else:
+            lines.append(f"  Permission: {permission}")
     else:
         lines.append(f"  Command: {cmd_name}")
         lines.append(f"  Full:    {full_command}")
@@ -93,23 +106,44 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
     highest_risk = "low"
     risk_priority = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
-    # Analyze each command
+    # Analyze each command with hierarchical matching
     for cmd in parsed["commands"]:
         cmd_name = cmd["command_name"]
         full_cmd = cmd["full_command"]
-        info = commands_db.get(cmd_name)
+        parts = cmd.get("command_parts", {})
+        candidates = parts.get("command_key_candidates", [cmd_name])
+        flags = set(parts.get("flags", []))
+
+        # Try candidates most-specific first
+        info = None
+        matched_key = None
+        for candidate in candidates:
+            if candidate in commands_db:
+                info = commands_db[candidate]
+                matched_key = candidate
+                break
+
+        # Check for dangerous flag escalation
+        escalated = False
+        if info is not None and info.get("permission") == "AlwaysAllow":
+            dangerous_found = flags & DANGEROUS_FLAGS
+            if dangerous_found:
+                escalated = True
 
         all_info.append({
             "name": cmd_name,
             "full": full_cmd,
-            "info": info
+            "info": info,
+            "matched_key": matched_key,
+            "escalated": escalated,
         })
 
         if info is None:
             unknown_commands.append(cmd_name)
         else:
-            if info.get("permission") == "AlwaysAsk":
-                needs_permission.append(cmd_name)
+            if info.get("permission") == "AlwaysAsk" or escalated:
+                display_name = matched_key or cmd_name
+                needs_permission.append(display_name)
 
             cmd_risk = info.get("risk", {}).get("level", "low")
             if risk_priority.get(cmd_risk, 0) > risk_priority.get(highest_risk, 0):
@@ -127,7 +161,8 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
     # Output each command's info
     for cmd_data in all_info:
         eprint("────────────────────────────────────────────────────────")
-        for line in format_command_info(cmd_data["name"], cmd_data["full"], cmd_data["info"]):
+        for line in format_command_info(cmd_data["name"], cmd_data["full"], cmd_data["info"],
+                                        cmd_data.get("matched_key"), cmd_data.get("escalated", False)):
             eprint(line)
         eprint("")
 
@@ -160,10 +195,10 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
         eprint("════════════════════════════════════════════════════════")
         eprint("")
         eprint("The following commands require explicit approval:")
-        for cmd in needs_permission:
-            cmd_info = commands_db.get(cmd, {})
+        for perm_key in needs_permission:
+            cmd_info = commands_db.get(perm_key, {})
             risk = cmd_info.get("risk", {})
-            eprint(f"  • {cmd}: {cmd_info.get('description', 'No description')}")
+            eprint(f"  • {perm_key}: {cmd_info.get('description', 'No description')}")
             eprint(f"    Risk: {risk.get('level', 'unknown').upper()} - {risk.get('reason', 'N/A')}")
         eprint("")
 

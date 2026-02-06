@@ -22,6 +22,16 @@
         "reason": "Permanently deletes files, cannot be undone"
       }
     },
+    "rm -rf": {
+      "name": "rm -rf",
+      "description": "Recursively force-remove files and directories without prompting",
+      "permission": "AlwaysAsk",
+      "risk": {
+        "level": "critical",
+        "color": "red",
+        "reason": "Recursively deletes entire directory trees without confirmation, extremely destructive"
+      }
+    },
     "git": {
       "name": "git",
       "description": "Version control system for tracking changes in source code",
@@ -29,7 +39,127 @@
       "risk": {
         "level": "low",
         "color": "green",
-        "reason": "Standard version control operations, changes can be reverted"
+        "reason": "Base git command, fallback for unregistered subcommands"
+      }
+    },
+    "git status": {
+      "name": "git status",
+      "description": "Show the working tree status",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Read-only operation, displays repository status"
+      }
+    },
+    "git diff": {
+      "name": "git diff",
+      "description": "Show changes between commits, commit and working tree, etc.",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Read-only operation, displays differences"
+      }
+    },
+    "git log": {
+      "name": "git log",
+      "description": "Show commit logs",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Read-only operation, displays commit history"
+      }
+    },
+    "git branch": {
+      "name": "git branch",
+      "description": "List, create, or delete branches",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Branch management, easily reversible"
+      }
+    },
+    "git add": {
+      "name": "git add",
+      "description": "Add file contents to the staging area",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Stages files for commit, reversible with git reset"
+      }
+    },
+    "git commit": {
+      "name": "git commit",
+      "description": "Record changes to the repository",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Creates commits, reversible with git reset"
+      }
+    },
+    "git checkout": {
+      "name": "git checkout",
+      "description": "Switch branches or restore working tree files",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Can discard uncommitted changes when used on files"
+      }
+    },
+    "git merge": {
+      "name": "git merge",
+      "description": "Join two or more development histories together",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Merges branches, may cause conflicts"
+      }
+    },
+    "git rebase": {
+      "name": "git rebase",
+      "description": "Reapply commits on top of another base tip",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Rewrites commit history, can be complex to undo"
+      }
+    },
+    "git push": {
+      "name": "git push",
+      "description": "Update remote refs along with associated objects",
+      "permission": "AlwaysAsk",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Publishes local commits to remote, visible to others"
+      }
+    },
+    "git push --force": {
+      "name": "git push --force",
+      "description": "Force-push to remote, overwriting remote history",
+      "permission": "AlwaysAsk",
+      "risk": {
+        "level": "high",
+        "color": "red",
+        "reason": "Overwrites remote history, can destroy others' work"
+      }
+    },
+    "git reset --hard": {
+      "name": "git reset --hard",
+      "description": "Reset working tree and index, discarding all changes",
+      "permission": "AlwaysAsk",
+      "risk": {
+        "level": "critical",
+        "color": "red",
+        "reason": "Permanently discards uncommitted changes and resets to target commit"
       }
     },
     "python3": {
@@ -100,6 +230,16 @@
         "level": "low",
         "color": "green",
         "reason": "Read-only navigation command that only changes the shell working directory"
+      }
+    },
+    "echo": {
+      "name": "echo",
+      "description": "Display text or variables to standard output",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Read-only output command, displays text to terminal"
       }
     }
   }
