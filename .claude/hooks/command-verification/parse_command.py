@@ -229,6 +229,32 @@ def extract_command_parts(command: str) -> Dict[str, Any]:
         candidate = " ".join(real_parts[:length])
         candidates.append(candidate)
 
+    # Also build candidates from subcommand tokens only (flags stripped).
+    # This handles cases like "git -C path status" where flags between the
+    # base command and subcommand prevent matching "git status".
+    # A subcommand token: doesn't start with '-', is a simple word (no path
+    # separators or dots), comes after the base command.
+    subcommand_tokens = [base]
+    i = 1
+    while i < len(real_parts):
+        token = real_parts[i]
+        if token.startswith('-'):
+            # Skip flag; if it's a short flag (-X), also skip the next token
+            # as it's likely the flag's argument (e.g., -C /path)
+            if len(token) == 2 and i + 1 < len(real_parts):
+                i += 2
+            else:
+                i += 1
+        else:
+            subcommand_tokens.append(token)
+            i += 1
+
+    if subcommand_tokens != real_parts:
+        for length in range(len(subcommand_tokens), 0, -1):
+            candidate = " ".join(subcommand_tokens[:length])
+            if candidate not in candidates:
+                candidates.append(candidate)
+
     return {
         "base": base,
         "tokens": real_parts,
