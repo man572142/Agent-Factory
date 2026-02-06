@@ -41,6 +41,66 @@
         "color": "yellow",
         "reason": "Executes Python code, risk depends on the script being run"
       }
+    },
+    "python": {
+      "name": "python",
+      "description": "Python interpreter for running Python scripts",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Executes Python code, risk depends on the script being run"
+      }
+    },
+    "where": {
+      "name": "where",
+      "description": "Windows command to locate and display file paths of executables",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Read-only informational command that searches and displays file paths"
+      }
+    },
+    "winget": {
+      "name": "winget",
+      "description": "Windows Package Manager CLI for discovering and installing applications",
+      "permission": "AlwaysAsk",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Downloads and installs software, modifying system state"
+      }
+    },
+    "pwsh": {
+      "name": "pwsh",
+      "description": "PowerShell 7 cross-platform shell and scripting language",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Executes PowerShell scripts, risk depends on the script being run"
+      }
+    },
+    "powershell": {
+      "name": "powershell",
+      "description": "Windows PowerShell (legacy) shell and scripting language",
+      "permission": "AlwaysAsk",
+      "risk": {
+        "level": "medium",
+        "color": "yellow",
+        "reason": "Executes PowerShell scripts, risk depends on the script being run"
+      }
+    },
+    "cd": {
+      "name": "cd",
+      "description": "Change current working directory",
+      "permission": "AlwaysAllow",
+      "risk": {
+        "level": "low",
+        "color": "green",
+        "reason": "Read-only navigation command that only changes the shell working directory"
+      }
     }
   }
 }
