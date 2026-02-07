@@ -54,7 +54,8 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def format_command_info(cmd_name: str, full_command: str, info: Dict[str, Any] | None) -> List[str]:
+def format_command_info(cmd_name: str, full_command: str, info: Dict[str, Any] | None,
+                        matched_key: str = None) -> List[str]:
     """Format command information for display."""
     lines = []
 
@@ -64,6 +65,8 @@ def format_command_info(cmd_name: str, full_command: str, info: Dict[str, Any] |
         indicator, _ = RISK_INDICATORS.get(risk_level, ("⚪", "Unknown"))
 
         lines.append(f"  Command: {cmd_name}")
+        if matched_key and matched_key != cmd_name:
+            lines.append(f"  Matched: {matched_key}")
         lines.append(f"  Full:    {full_command}")
         lines.append(f"  Description: {info.get('description', 'No description')}")
         lines.append(f"  Risk: {indicator} {risk_level.upper()} - {risk.get('reason', 'No reason provided')}")
@@ -93,23 +96,50 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
     highest_risk = "low"
     risk_priority = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
-    # Analyze each command
+    # Analyze each command with hierarchical matching
     for cmd in parsed["commands"]:
         cmd_name = cmd["command_name"]
         full_cmd = cmd["full_command"]
-        info = commands_db.get(cmd_name)
+        parts = cmd.get("command_parts", {})
+        candidates = parts.get("command_key_candidates", [cmd_name])
+
+        # Try candidates most-specific first
+        # No fallback: if the registry has subcommand entries for a base
+        # command (e.g., "git push"), then the base entry ("git") only
+        # matches bare "git", not "git <anything>". Commands without
+        # subcommand entries (e.g., "python") still match normally.
+        tokens = parts.get("tokens", [])
+        base = parts.get("base", "")
+        has_subcommand_entries = any(
+            k.startswith(base + " ") for k in commands_db
+        ) if base else False
+
+        info = None
+        matched_key = None
+        for candidate in candidates:
+            # Skip base-only fallback when subcommand entries exist
+            if (has_subcommand_entries
+                    and " " not in candidate
+                    and len(tokens) > 1):
+                continue
+            if candidate in commands_db:
+                info = commands_db[candidate]
+                matched_key = candidate
+                break
 
         all_info.append({
             "name": cmd_name,
             "full": full_cmd,
-            "info": info
+            "info": info,
+            "matched_key": matched_key,
         })
 
         if info is None:
             unknown_commands.append(cmd_name)
         else:
             if info.get("permission") == "AlwaysAsk":
-                needs_permission.append(cmd_name)
+                display_name = matched_key or cmd_name
+                needs_permission.append(display_name)
 
             cmd_risk = info.get("risk", {}).get("level", "low")
             if risk_priority.get(cmd_risk, 0) > risk_priority.get(highest_risk, 0):
@@ -127,7 +157,8 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
     # Output each command's info
     for cmd_data in all_info:
         eprint("────────────────────────────────────────────────────────")
-        for line in format_command_info(cmd_data["name"], cmd_data["full"], cmd_data["info"]):
+        for line in format_command_info(cmd_data["name"], cmd_data["full"], cmd_data["info"],
+                                        cmd_data.get("matched_key")):
             eprint(line)
         eprint("")
 
@@ -160,10 +191,10 @@ def verify_and_explain(command_line: str) -> Dict[str, Any]:
         eprint("════════════════════════════════════════════════════════")
         eprint("")
         eprint("The following commands require explicit approval:")
-        for cmd in needs_permission:
-            cmd_info = commands_db.get(cmd, {})
+        for perm_key in needs_permission:
+            cmd_info = commands_db.get(perm_key, {})
             risk = cmd_info.get("risk", {})
-            eprint(f"  • {cmd}: {cmd_info.get('description', 'No description')}")
+            eprint(f"  • {perm_key}: {cmd_info.get('description', 'No description')}")
             eprint(f"    Risk: {risk.get('level', 'unknown').upper()} - {risk.get('reason', 'N/A')}")
         eprint("")
 
